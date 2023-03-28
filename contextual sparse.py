@@ -30,7 +30,7 @@ def AtmLight(im, dark):
 
 
 def TransmissionEstimate(im, A, sz):
-    omega = 0.95;
+    omega = 0.5
     im3 = np.empty(im.shape, im.dtype);
 
     for ind in range(0, 3):
@@ -38,35 +38,6 @@ def TransmissionEstimate(im, A, sz):
 
     transmission = 1 - omega * DarkChannel(im3, sz);
     return transmission
-
-
-def Guidedfilter(im, p, r, eps):
-    mean_I = cv2.boxFilter(im, cv2.CV_64F, (r, r));
-    mean_p = cv2.boxFilter(p, cv2.CV_64F, (r, r));
-    mean_Ip = cv2.boxFilter(im * p, cv2.CV_64F, (r, r));
-    cov_Ip = mean_Ip - mean_I * mean_p;
-
-    mean_II = cv2.boxFilter(im * im, cv2.CV_64F, (r, r));
-    var_I = mean_II - mean_I * mean_I;
-
-    a = cov_Ip / (var_I + eps);
-    b = mean_p - a * mean_I;
-
-    mean_a = cv2.boxFilter(a, cv2.CV_64F, (r, r));
-    mean_b = cv2.boxFilter(b, cv2.CV_64F, (r, r));
-
-    q = mean_a * im + mean_b;
-    return q;
-
-
-def TransmissionRefine(im, et):
-    gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY);
-    gray = np.float64(gray) / 255;
-    r = 60;
-    eps = 0.0001;
-    t = Guidedfilter(gray, et, r, eps);
-
-    return t;
 
 
 def Recover(im, t, A, tx=0.1):
@@ -77,23 +48,34 @@ def Recover(im, t, A, tx=0.1):
 
     return res
 
+def maximumBoxFilter(n, path_to_image):
+  # Creates the shape of the kernel
+  size = (n,n)
+  shape = cv2.MORPH_RECT
+  kernel = cv2.getStructuringElement(shape, size)
+
+  # Applies the maximum filter with kernel NxN
+  imgResult = cv2.dilate(path_to_image, kernel)
+
+  # Shows the result
+  cv2.namedWindow('Result with n ' + str(n), cv2.WINDOW_NORMAL) # Adjust the window length
+  cv2.imshow('Result with n ' + str(n), imgResult)
+  return imgResult
 
 def TrnasmissonMap(im, A):
-    im4 = np.empty(im.shape, im.dtype);
-
-
     for ind in range(0, 3):
         t = cv2.min(cv2.max((A[0, ind] - im[:, :, ind]) / A[0, ind], (A[0, ind] - im[:, :, ind]) / (A[0, ind]-255)), 1)
-        ti = cv2.max(cv2.min(t, 1), 0)
-    return ti
+    return t
 
 def k(src):
-    dst = cv2.blur(src, (8,8))
+    dst = cv2.blur(src, (3,3))
     return dst
 
 def i_f(src1,src2):
-    alpha = 0.7
-    i_f = cv2.addWeighted(src1, alpha, src2, (1 - alpha), 0)
+    alpha = 0.5
+    #i_f = cv2.addWeighted(src1, alpha, src2, 1-alpha, 0, dst=None, dtype=None)\
+    i_f = src1+src2
+
     return i_f
 
 if __name__ == '__main__':
@@ -105,29 +87,43 @@ if __name__ == '__main__':
         fn = 'im6.jpg'
 
 
+
+
     def nothing(*argv):
         pass
 
 
     src = cv2.imread(fn);
-
     I = src.astype('float64') / 255;
 
     dark = DarkChannel(I, 15);
     A = AtmLight(I, dark);
-    te = TransmissionEstimate(I, A, 15);
-    t = TransmissionRefine(src, te);
-    k=k(t)
-    tm = TrnasmissonMap(I,A);
 
-    i_f = i_f(k,tm)
-    J = Recover(I, t, A, 0.1);
-    J1 = Recover(I, i_f, A, 0.1);
+
+    #t = maximumBoxFilter(1,te)
+
+
+    tm = TrnasmissonMap(I,A);
+    k = k(tm)
+    TT = tm-k
+    cv2.imshow("TT",TT)
+
+    te = TransmissionEstimate(I, A, 15)
+    dst = cv2.blur(te, (3, 3))
+    """k1 = k(te)"""
+    T1 = te-dst
+    T2 = te-T1
+    cv2.imshow("T1", T1)
+    cv2.imshow("T2", T2)
+    i_f = i_f(T2,TT)
+
+    #J = Recover(I, t, A);
+    J1 = Recover(I, i_f, A);
     cv2.imshow("dark", dark);
-    cv2.imshow("t", t);
+    cv2.imshow("t", k);
     cv2.imshow('I', src);
     cv2.imshow('Iasd', i_f);
-    cv2.imshow('J', J);
+    #cv2.imshow('J', J);
     cv2.imshow('J1', J1);
     cv2.imshow('te', te);
 
